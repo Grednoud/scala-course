@@ -277,10 +277,7 @@ object hof{
 
     sealed trait List[+T] {
 
-      def ::[A >: T](elem: A): List[A] = this match {
-        case ::(head, tail) => new ::(elem, this)
-        case Nil => List(elem)
-      }
+      def ::[A >: T](elem: A): List[A] = new ::(elem, this)
 
       def mkString(delimiter: String): String = this match {
         case Nil => ""
@@ -294,35 +291,25 @@ object hof{
           case head :: tail => loop(tail, head :: acc)
           case Nil => acc
         }
-        this match {
-          case _ :: _ => loop(this, Nil)
-          case Nil => Nil
-        }
+        loop(this, Nil)
       }
 
       def map[A](f: T => A): List[A] = {
         @tailrec
-        def loop(list: List[T], acc: List[A], f: T => A): List[A] = list match {
-          case head :: tail => loop(tail, f(head) :: acc, f)
+        def loop(list: List[T], acc: List[A]): List[A] = list match {
+          case head :: tail => loop(tail, f(head) :: acc)
           case Nil => acc.reverse
-        }
-
-        this match {
-          case _ :: _ => loop(this, Nil, f)
-          case Nil => Nil
-        }
+        } 
+        loop(this, Nil)
       }
 
       def filter(p: T => Boolean): List[T] = {
         @tailrec
-        def loop(list: List[T], acc: List[T], p: T => Boolean): List[T] = list match {
-          case head :: tail => loop(tail, if (p(head)) head :: acc else acc, p)
+        def loop(list: List[T], acc: List[T]): List[T] = list match {
+          case head :: tail => loop(tail, if (p(head)) head :: acc else acc)
           case Nil => acc.reverse
         }
-        this match {
-          case _ :: _ => loop(this, Nil, p)
-          case Nil => Nil
-        }
+        loop(this, Nil)
       }
 
     }
