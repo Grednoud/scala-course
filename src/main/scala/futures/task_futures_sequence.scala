@@ -3,7 +3,6 @@ package futures
 import HomeworksUtils.TaskSyntax
 
 import scala.concurrent.{ExecutionContext, Future}
-import scala.tools.nsc.interpreter.Results
 import scala.util.Success
 import scala.util.Failure
 
