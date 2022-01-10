@@ -26,11 +26,10 @@ object task_futures_sequence {
     
     futures.foldLeft(Future.successful((List.empty[A], List.empty[Throwable]))){(accum, future) => 
       for {
-        acc <- accum
-        res <- future.transform{
-          case Success(value) => Success(acc._1 :+ value, acc._2)
-          case Failure(exception) => Success(acc._1, acc._2 :+ exception)
-        }
+        (successList, failureList) <- accum
+        res <- future
+                .map(value => ((value +: successList), failureList))
+                .recoverWith(ex => Future.successful((successList, (ex +: failureList))))
       } yield res
     }
   }
