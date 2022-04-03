@@ -5,23 +5,27 @@ package object monad {
    * HINT: для проверки на пустой элемент можно использовать eq
    */
 
-  trait Wrap[+A] {
+  sealed trait Wrap[+A] {
 
     def get: A
 
-    def pure[R](x: R): Wrap[R] = ???
+    def pure[R](x: R): Wrap[R] = NonEmptyWrap(x)
 
     def flatMap[R](f: A => Wrap[R]): Wrap[R] = {
-      ???
+      this match {
+        case NonEmptyWrap(result) => f(result)
+        case EmptyWrap => Wrap.empty[R]
+      }
     }
 
     // HINT: map можно реализовать через pure и flatMap
     def map[R](f: A => R): Wrap[R] = {
-      ???
+      flatMap(x => pure(f(x)))
     }
 
-    def withFilter(f: A => Boolean): Wrap[A] = {
-      ???
+    def withFilter(f: A => Boolean): Wrap[A] = this match {
+      case NonEmptyWrap(result) if f(result) => this 
+      case _ => Wrap.empty
     }
 
   }
