@@ -33,16 +33,27 @@ object UserService{
         userRepo.list()
 
 
-        def listUsersDTO(): RIO[db.DataSource,List[UserDTO]] = ???
+        def listUsersDTO(): RIO[db.DataSource,List[UserDTO]] = for {
+            users <- userRepo.list()
+            res <-ZIO.foreach(users)(u => userRepo.userRoles(u.typedId).map(roles => UserDTO(u, roles.toSet)))
+        } yield res
+            
         
-        def addUserWithRole(user: User, roleCode: RoleCode): RIO[db.DataSource, UserDTO] = ???
+        def addUserWithRole(user: User, roleCode: RoleCode): RIO[db.DataSource, UserDTO] = for {
+            u <- userRepo.createUser(user)
+            _ <- userRepo.insertRoleToUser(roleCode, u.typedId)
+            res <- userRepo.userRoles(u.typedId).map(roles => UserDTO(u, roles.toSet))
+        } yield res
         
-        def listUsersWithRole(roleCode: RoleCode): RIO[db.DataSource,List[UserDTO]] = ???
+        def listUsersWithRole(roleCode: RoleCode): RIO[db.DataSource,List[UserDTO]] = for {
+            users <- userRepo.listUsersWithRole(roleCode)
+            res <- ZIO.foreach(users)(u => userRepo.userRoles(u.typedId).map(roles => UserDTO(u, roles.toSet)))
+        } yield res
         
         
     }
 
-    val live: ZLayer[UserRepository.UserRepository, Nothing, UserService] = ???
+    val live: ZLayer[UserRepository.UserRepository, Nothing, UserService] = ZLayer.fromService(new Impl(_))
 }
 
 case class UserDTO(user: User, roles: Set[Role])

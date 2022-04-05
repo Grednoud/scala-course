@@ -7,7 +7,7 @@ lazy val root = (project in file("."))
   .settings(
     name := "scala-dev-mooc-2021-11",
     version := "0.1",
-    scalaVersion := "2.13.3",
+    scalaVersion := "2.13.6",
     libraryDependencies ++= Dependencies.zio,
     libraryDependencies ++= Dependencies.pureconfig,
     libraryDependencies ++= Dependencies.zioConfig,
