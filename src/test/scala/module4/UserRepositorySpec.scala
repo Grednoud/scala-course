@@ -31,7 +31,7 @@ object UserRepositorySpec extends DefaultRunnableSpec{
     import dc._
 
     type Env = Blocking with TestContainer.Postgres with DBTransactor.DataSource with
-        UserRepository.UserRepository with LiquibaseService.Liqui with  LiquibaseService.LiquibaseService
+        UserRepository.UserRepository with LiquibaseService.Liqui with LiquibaseService.LiquibaseService
     
     val layer: ZLayer[Any, Throwable, Env] = 
         Blocking.live >+> TestContainer.postgres() >+> DBTransactor.test >+> LiquibaseService.liquibaseLayer ++ 
