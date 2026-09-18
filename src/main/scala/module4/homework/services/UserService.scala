@@ -1,48 +1,46 @@
 package module4.homework.services
 
-import zio.Has
-import zio.Task
-import module4.homework.dao.entity.User
-import module4.homework.dao.entity.Role
+import zio._
+import module4.homework.dao.entity.{User, UserId}
 import module4.homework.dao.repository.UserRepository
-import zio.interop.catz._
-import zio.ZIO
-import zio.RIO
-import module4.homework.dao.entity.UserToRole
-import zio.ZLayer
-import zio.macros.accessible
-import module4.homework.dao.entity.RoleCode
 import module4.phoneBook.db
 
-@accessible
-object UserService{
-    type UserService = Has[Service]
+object UserService {
 
-    trait Service{
-        def listUsers(): RIO[db.DataSource, List[User]]
-        def listUsersDTO(): RIO[db.DataSource, List[UserDTO]]
-        def addUserWithRole(user: User, roleCode: RoleCode): RIO[db.DataSource, UserDTO]
-        def listUsersWithRole(roleCode: RoleCode): RIO[db.DataSource, List[UserDTO]]
+    /**
+     * В ZIO 2:
+     * - Has[A] больше не используется
+     */
+
+    type UserService = Service
+
+    trait Service {
+        def getUser(userId: UserId): ZIO[db.DataSource, Throwable, Option[User]]
+        def listUsers: ZIO[db.DataSource, Throwable, List[User]]
+        def createUser(user: User): ZIO[db.DataSource, Throwable, User]
     }
 
-    class Impl(userRepo: UserRepository.Service) extends Service{
-        val dc = db.Ctx
-        import dc._
-
-        def listUsers(): RIO[db.DataSource, List[User]] =
-        userRepo.list()
-
-
-        def listUsersDTO(): RIO[db.DataSource,List[UserDTO]] = ???
+    class ServiceImpl(userRepository: UserRepository.Service) extends Service {
+        def getUser(userId: UserId): ZIO[db.DataSource, Throwable, Option[User]] = 
+            userRepository.findUser(userId)
         
-        def addUserWithRole(user: User, roleCode: RoleCode): RIO[db.DataSource, UserDTO] = ???
+        def listUsers: ZIO[db.DataSource, Throwable, List[User]] = 
+            userRepository.list()
         
-        def listUsersWithRole(roleCode: RoleCode): RIO[db.DataSource,List[UserDTO]] = ???
-        
-        
+        def createUser(user: User): ZIO[db.DataSource, Throwable, User] = 
+            userRepository.createUser(user)
     }
 
-    val live: ZLayer[UserRepository.UserRepository, Nothing, UserService] = ???
+    val live: ZLayer[UserRepository.Service, Nothing, UserService] = 
+        ZLayer.fromFunction((repo: UserRepository.Service) => new ServiceImpl(repo): UserService)
+
+    def getUser(userId: UserId): ZIO[UserService with db.DataSource, Throwable, Option[User]] =
+        ZIO.serviceWithZIO[UserService](_.getUser(userId))
+
+    def listUsers: ZIO[UserService with db.DataSource, Throwable, List[User]] =
+        ZIO.serviceWithZIO[UserService](_.listUsers)
+
+    def createUser(user: User): ZIO[UserService with db.DataSource, Throwable, User] =
+        ZIO.serviceWithZIO[UserService](_.createUser(user))
+
 }
-
-case class UserDTO(user: User, roles: Set[Role])

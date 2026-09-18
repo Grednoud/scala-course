@@ -1,27 +1,34 @@
 package module3
 
-import zio.Has
-import zio.{URIO, UIO}
-import zio.{ZLayer, ULayer}
-import zio.console
-import zio.ZIO
-import zio.macros.accessible
+import zio._
 
 
 package object emailService {
 
-    type EmailService = Has[EmailService.Service]
+    case class EmailAddress(value: String)
+    case class Html(content: String)
+    case class Email(to: EmailAddress, body: Html)
 
-    @accessible
-    object EmailService{
-        trait Service{
-            def sendMail(email: Email): URIO[zio.console.Console, Unit]
+    /**
+     * В ZIO 2:
+     * - Has[A] больше не используется
+     * - Сервисы объявляются как trait и предоставляются через ZLayer
+     */
+
+    type EmailService = EmailService.Service
+
+    object EmailService {
+        trait Service {
+            def sendMail(email: Email): UIO[Unit]
         }
 
         val live: ULayer[EmailService] = ZLayer.succeed(new Service {
-            def sendMail(email: Email): URIO[zio.console.Console,Unit] = 
-                zio.console.putStrLn(email.toString()).orDie
+            def sendMail(email: Email): UIO[Unit] = 
+                Console.printLine(email.toString()).orDie
         })
+
+        def sendMail(email: Email): URIO[EmailService, Unit] = 
+          ZIO.serviceWithZIO[EmailService](_.sendMail(email))
     }
 
 }

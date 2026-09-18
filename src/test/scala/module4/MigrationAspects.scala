@@ -1,65 +1,58 @@
 package module4
 
-import com.dimafeng.testcontainers.PostgreSQLContainer
-import zio.ZIO
-import zio.test.TestAspect._
-import zio.Has
-import zio.macros.accessible
-import zio.RIO
-import zio.Task
-import zio.interop.catz._
-import zio.ZManaged
+import zio._
+import zio.test._
 import liquibase.Liquibase
-import liquibase.resource.FileSystemResourceAccessor
 import liquibase.resource.ClassLoaderResourceAccessor
-import liquibase.resource.CompositeResourceAccessor
 import liquibase.database.jvm.JdbcConnection
-import module4.phoneBook.db.DataSource
-import zio.{ULayer, ZLayer}
-import zio.URIO
 
 object MigrationAspects {
+
+  /**
+   * В ZIO 2:
+   * - Has[A] больше не используется
+   * - ZManaged -> Scope + ZIO.acquireRelease
+   * - TestAspect.before для запуска миграций
+   */
   
-  def migrate() = {
-    before(LiquibaseService.performMigration.orDie)
-  }
+  def migrate(): TestAspect[Nothing, LiquibaseService.Liqui, Nothing, Any] = 
+    TestAspect.before(LiquibaseService.performMigration.orDie)
 
 }
 
-@accessible
 object LiquibaseService {
 
-    type Liqui = Has[Liquibase]
-
-    type LiquibaseService = Has[LiquibaseService.Service]
-
+    type Liqui = Liquibase
+    type LiquibaseService = Service
+    type DataSource = javax.sql.DataSource
 
     trait Service {
-      def performMigration: RIO[Liqui, Unit]
+      def performMigration: RIO[Liquibase, Unit]
     }
 
     class Impl extends Service {
-
-      override def performMigration: RIO[Liqui, Unit] = liquibase.map(_.update("dev"))
+      override def performMigration: RIO[Liquibase, Unit] = 
+        ZIO.serviceWith[Liquibase](_.update("dev"))
     }
 
+    def mkLiquibase(): ZIO[DataSource with Scope, Throwable, Liquibase] = for {
+      ds <- ZIO.service[DataSource]
+      classLoader <- ZIO.attempt(classOf[LiquibaseService].getClassLoader)
+      classLoaderAccessor <- ZIO.attempt(new ClassLoaderResourceAccessor(classLoader))
+      jdbcConn <- ZIO.acquireRelease(
+        ZIO.attempt(new JdbcConnection(ds.getConnection()))
+      )(c => ZIO.succeed(c.close()))
+      liqui <- ZIO.attempt(new Liquibase("src/test/resources/liquibase/main.xml", classLoaderAccessor, jdbcConn))
+    } yield liqui
 
-  def mkLiquibase(): ZManaged[DataSource, Throwable, Liquibase] = for {
-    ds <- ZIO.environment[DataSource].map(_.get).toManaged_
-    fileAccessor <-  ZIO.effect(new FileSystemResourceAccessor()).toManaged_
-    classLoader <- ZIO.effect(classOf[LiquibaseService].getClassLoader).toManaged_
-    classLoaderAccessor <- ZIO.effect(new ClassLoaderResourceAccessor(classLoader)).toManaged_
-    fileOpener <- ZIO.effect(new CompositeResourceAccessor(fileAccessor, classLoaderAccessor)).toManaged_
-    jdbcConn <- ZManaged.makeEffect(new JdbcConnection(ds.getConnection()))(c => c.close())
-    liqui <- ZIO.effect(new Liquibase("src/test/resources/liquibase/main.xml", fileOpener, jdbcConn)).toManaged_
-  } yield liqui
+    val liquibaseLayer: ZLayer[DataSource, Throwable, Liquibase] = 
+      ZLayer.scoped(mkLiquibase())
 
-
-    val liquibaseLayer: ZLayer[DataSource, Throwable, Liqui] = ZLayer.fromManaged(mkLiquibase())
-
-
-    def liquibase: URIO[Liqui, Liquibase] = ZIO.service[Liquibase]
+    def liquibase: URIO[Liquibase, Liquibase] = ZIO.service[Liquibase]
 
     val live: ULayer[LiquibaseService] = ZLayer.succeed(new Impl)
+
+    def performMigration: RIO[Liquibase, Unit] = 
+      ZIO.serviceWith[Liquibase](_.update("dev"))
 
 }

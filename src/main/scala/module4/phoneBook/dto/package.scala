@@ -12,22 +12,25 @@ package object dto {
 
     case class PhoneRecordDTO(phone: String, fio: String, zipCode: String, address: String)
 
-    object PhoneRecordDTO{
+    object PhoneRecordDTO {
         def from(phoneRecord: PhoneRecord): PhoneRecordDTO = PhoneRecordDTO(
             phoneRecord.phone,
             phoneRecord.fio,
             "",
             ""
         ) 
+
+        implicit val codec: Codec[PhoneRecordDTO] = deriveCodec[PhoneRecordDTO]
     }
 
     case class RecordId(id: Int)
 
-    object IdVar{
+    object IdVar {
         def unapply(str: String): Option[RecordId] = {
             Try(str.toInt) match {
-                case Failure(exception) => None
+                case Failure(_) => None
                 case Success(value) if value < 0 => None
+                case Success(value) => Some(RecordId(value))
             }
         }
     }

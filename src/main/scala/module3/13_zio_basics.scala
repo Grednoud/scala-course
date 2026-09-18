@@ -1,31 +1,17 @@
 package module3
 
-import zio.clock.{Clock, nanoTime}
-import zio.console.{Console, getStrLn}
+import zio._
 
-import java.io.IOException
 import scala.concurrent.Future
 import scala.io.StdIn
 import scala.util.Try
-import zio.duration._
-import scala.language.postfixOps
-import zio.Task
-import zio.IO
-import zio.RIO
-import zio.URIO
-import zio.UIO
-import zio.ZIO
-
+import java.io.IOException
 
 
 /** **
  * ZIO[-R, +E, +A] ----> R => Either[E, A]
  *
  */
-
-// val f: String => Either[Throwable, Int] = ???
-
-// f()
 
 object toyModel {
 
@@ -88,11 +74,11 @@ object toyModel {
 
 
 
-  lazy val _: Task[Int] = ??? // ZIO[Any, Throwable, Int]
-  lazy val _: IO[Error, Int] = ??? // ZIO[Any, Error, Int]
-  lazy val _: RIO[Environment, Int] = ??? // ZIO[Environment, Throwable, Int]
-  lazy val _: URIO[Environment, Int] = ??? // ZIO[Environment, Nothing, Int]
-  lazy val _: UIO[Int] = ??? // ZIO[Any, Nothing, Int]
+  lazy val t1: zio.Task[Int] = ??? // ZIO[Any, Throwable, Int]
+  lazy val io1: zio.IO[Error, Int] = ??? // ZIO[Any, Error, Int]
+  lazy val rio1: zio.RIO[Environment, Int] = ??? // ZIO[Environment, Throwable, Int]
+  lazy val urio1: zio.URIO[Environment, Int] = ??? // ZIO[Environment, Nothing, Int]
+  lazy val uio1: zio.UIO[Int] = ??? // ZIO[Any, Nothing, Int]
 }
 
 object zioConstructors {
@@ -103,11 +89,11 @@ object zioConstructors {
 
 
   // любой эффект
-  val z2: Task[Unit] = ZIO.effect(println("Hello"))
+  val z2: Task[Unit] = ZIO.attempt(println("Hello"))
 
   // любой не падающий эффект
 
-  val z3: UIO[Unit] = ZIO.effectTotal(println("Hello"))
+  val z3: UIO[Unit] = ZIO.succeed(println("Hello"))
 
 
 
@@ -129,7 +115,6 @@ object zioConstructors {
 
 
 
-
   // From option
   lazy val opt : Option[Int] = ???
   lazy val z7: IO[Option[Nothing], Int] = ZIO.fromOption(opt)
@@ -138,21 +123,20 @@ object zioConstructors {
 
 
 
-
   // From function
-  lazy val z8: URIO[String, Int] = ZIO.fromFunction[String, Int](str => str.toInt)
+  lazy val z8: URIO[String, Int] = ZIO.serviceWith[String](str => str.toInt)
 
   // особые версии конструкторов
 
-  lazy val _: UIO[Unit] = ZIO.unit
+  lazy val unit1: UIO[Unit] = ZIO.unit
 
-  lazy val _: UIO[Option[Nothing]] = ZIO.none
+  lazy val none1: UIO[Option[Nothing]] = ZIO.none
 
-  lazy val _: UIO[Nothing] = ZIO.never // while(true)
+  lazy val never1: UIO[Nothing] = ZIO.never // while(true)
 
-  lazy val _: ZIO[Any, Nothing, Nothing] = ZIO.die(new Throwable("Ooops"))
+  lazy val die1: ZIO[Any, Nothing, Nothing] = ZIO.die(new Throwable("Ooops"))
 
-  lazy val _: ZIO[Any, Int, Nothing] = ZIO.fail(1)
+  lazy val fail1: ZIO[Any, Int, Nothing] = ZIO.fail(1)
 
 }
 
@@ -198,7 +182,10 @@ object zioOperators {
   lazy val b1: Task[String] = ???
 
 
-  lazy val z9: ZIO[Any,Throwable,(Unit, String)] = a1 zip b1
+  lazy val z9: ZIO[Any,Throwable,(Unit, String)] = for {
+    u <- a1
+    s <- b1
+  } yield (u, s)
 
   lazy val z10: ZIO[Any,Throwable, String] = a1 *> b1
 
@@ -206,7 +193,7 @@ object zioOperators {
 
 
   // greet and echo улучшенный
-  lazy val _: ZIO[Any, Throwable, Unit] = ???
+  lazy val greetAndEchoImproved: ZIO[Any, Throwable, Unit] = ???
 
 
   /**
@@ -266,7 +253,6 @@ object zioOperators {
     * 
     * A as B
     */
-
 
 
 

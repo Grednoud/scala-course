@@ -1,10 +1,38 @@
-.idea
-.bloop
-.metals
-.vscode
-.scalafmt.conf
-project/target
+# IDE
+.idea/
+.bloop/
+.metals/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Scala/sbt
+target/
+project/target/
+project/project/
 project/metals.sbt
-project/project
-target
+
+# Scalafmt
+.scalafmt.conf
+
+# Build artifacts
+*.class
+*.log
+*.jar
+
+# Environment
 .env
+.env.local
+.envrc
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test containers
+docker-compose.override.yml
+
+# Coverage
+scoverage-data/
+target/scoverage-report/

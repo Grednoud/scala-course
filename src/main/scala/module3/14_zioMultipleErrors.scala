@@ -1,25 +1,30 @@
 package module3
 
-import zio.IO
-import zio.ZIO
-import zio.Cause
-import zio.console._
+import zio._
 
+object zioMultipleErrors {
 
-trait Error extends Product
-case object E1 extends Error
-case object E2 extends Error
+  sealed trait AppError
+  case class DatabaseError(message: String) extends AppError
+  case class ValidationError(message: String) extends AppError
+  case class NetworkError(message: String) extends AppError
 
-object multipleErrors{
-    val z1: IO[E1.type, Int] = ZIO.fail(E1)
+  // Работа с несколькими типами ошибок
 
-    val z2: IO[E2.type, Int] = ZIO.fail(E2)
+  val dbOperation: IO[DatabaseError, String] = 
+    ZIO.fail(DatabaseError("Connection failed"))
 
-    val result = z1 zipPar z2
+  val validationOperation: IO[ValidationError, Int] = 
+    ZIO.fail(ValidationError("Invalid input"))
 
-    val app = result.tapCause{
-        case Cause.Both(c1, c2) =>
-            putStrLn(c1.failureOption.toString()) *> putStrLn(c2.failureOption.toString())
-    }.orElse(putStrLn("Effect failed"))
-    
+  // Объединение ошибок через общий тип
+  val combined: IO[AppError, (String, Int)] = for {
+    str <- dbOperation
+    num <- validationOperation
+  } yield (str, num)
+
+  // Преобразование ошибки в общий тип
+  val unified: IO[AppError, String] = 
+    dbOperation.mapError(identity)
+
 }
