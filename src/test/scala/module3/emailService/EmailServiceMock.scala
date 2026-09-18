@@ -1,20 +1,18 @@
 package module3.emailService
 
-import zio.test.mock.mockable
-import zio.test.mock
-import zio.{URLayer, Has}
-import zio.ZLayer
-import zio.URIO
-import zio.UIO
+import zio._
 
-object EmailServiceMock extends mock.Mock[EmailService]{
+object EmailServiceMock {
 
-    object SendMail extends Effect[Email, Nothing, Unit]
+  /**
+   * В ZIO 2:
+   * - mock.Mock больше не доступен в том виде
+   * - Моки создаются вручную через ZLayer
+   */
 
-    val compose: URLayer[Has[mock.Proxy], EmailService] = ZLayer.fromService{ proxy =>
-        new EmailService.Service {
-            def sendMail(email: Email): URIO[zio.console.Console,Unit] = proxy(SendMail, email)
-        }
+  def make(onSendMail: Email => Unit = _ => ()): ULayer[EmailService] = 
+    ZLayer.succeed(new EmailService.Service {
+      def sendMail(email: Email): UIO[Unit] = ZIO.succeed(onSendMail(email))
+    })
 
-    }
 }

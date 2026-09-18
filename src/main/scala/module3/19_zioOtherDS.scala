@@ -1,123 +1,55 @@
 package module3
 
-import zio.UIO
-import java.util.concurrent.atomic.AtomicReference
-import zio.ZIO
-import zio.Chunk
-import zio.Schedule
-import scala.language.postfixOps
-import zio.duration.durationInt
-import zio.console
-import zio.clock.Clock
-import zio.random._
-import zio.console._
-import zio.duration.Duration
-import zio.Promise
-import zio.URIO
-import sbt.testing.Task
+import zio._
 
-object zioDS {
+object zioOtherDS {
 
-  object schedule {
+  /**
+   * Другие структуры данных ZIO
+   */
 
-    val eff = ZIO.effect(println("hello"))
+  // Ref - изменяемая ссылка
+  val refExample: UIO[Int] = for {
+    ref <- Ref.make(0)
+    _ <- ref.update(_ + 1)
+    _ <- ref.update(_ + 2)
+    value <- ref.get
+  } yield value
 
-    /** 1. Написать эффект, котрый будет выводить в консоль Hello 5 раз
-      */
+  // Promise - одноразовое значение
+  val promiseExample: UIO[Int] = for {
+    promise <- Promise.make[Nothing, Int]
+    _ <- promise.succeed(42).fork
+    value <- promise.await
+  } yield value
 
-      val schedule1: Schedule[Any,Any,Long] = Schedule.recurs(5)
+  // Queue - очередь
+  val queueExample: UIO[Int] = for {
+    queue <- Queue.bounded[Int](10)
+    _ <- queue.offer(1)
+    _ <- queue.offer(2)
+    first <- queue.take
+    second <- queue.take
+  } yield first + second
 
-      eff.repeat(schedule1)
-
-   
-    /** 2. Написать эффект, который будет выводить в консоль Hello 5 раз, раз в секунду
-      */
-
-      val schedule2 = Schedule.fixed(1 second)
-
-      eff.repeat(schedule1 && schedule2)
-
-
-    /** Написать эффект, который будет генерить произвольное число от 0 до 10,
-      * и повторяться пока число не будет равным 0
-      */
-
-    val schedule3 = Schedule.recurWhile[Int]( _ > 0)
-    val random = nextIntBetween(0, 11)
-
-    random.repeat(schedule3)
-
-
-
-    /** Написать эффект, который будет выполняться каждую пятницу 12 часов дня
-      */
-
-    val schedule5 = Schedule.dayOfWeek(5) && Schedule.hourOfDay(12)
-
-
+  // Hub - широковещательная очередь
+  // Примечание: subscribe требует Scope, поэтому оборачиваем в scoped
+  val hubExample: ZIO[Any, Nothing, Chunk[Int]] = ZIO.scoped {
+    for {
+      hub <- Hub.bounded[Int](10)
+      subscription <- hub.subscribe
+      _ <- hub.publish(1)
+      _ <- hub.publish(2)
+      values <- subscription.takeAll
+    } yield values
   }
 
-  object ref {
-
-   /**
-    *  Счетчик
-    * 
-    */
-
-    var counter: Int = 0
-
-    val updateCounter: UIO[Int] = for{
-      _ <- UIO.foreachPar_((1 to 100))(_ => ZIO.effectTotal(counter += 1))
-    } yield counter
-
-
-
-
-
-
-    trait Ref[A] {
-      def modify[B](f: A => (B, A)): UIO[B]
-
-      def get: UIO[A] = modify(a => (a, a))
-
-      def set(a: A): UIO[Unit] = modify(_ => ((), a))
-
-      def update[B](f: A => A): UIO[Unit] =
-        modify(a => ((), f(a)))
+  // Semaphore - семафор
+  val semaphoreExample: UIO[Unit] = for {
+    semaphore <- Semaphore.make(1)
+    _ <- semaphore.withPermit {
+      Console.printLine("Critical section").orDie
     }
-
-    object Ref {
-      def make[A](a: A): UIO[Ref[A]] = ZIO.effectTotal{
-        new Ref[A]{
-          val atomic = new AtomicReference(a)
-          def modify[B](f: A => (B, A)): UIO[B] = ZIO.effectTotal{
-            var l = true
-            var b: B = null.asInstanceOf[B]
-            while(l){
-              val current = atomic.get
-              val tuple = f(current)
-              b = tuple._1
-              l = !atomic.compareAndSet(current, tuple._2)
-            }
-            b
-          }
-        }
-      }
-
-    /** 
-      * корректный счетчик
-      */
-
-
-    }
-
-    // val updateCounterRef = for{
-    //   counter <- Ref.make(0)
-    //   _ <- UIO.foreachPar_((1 to 100))(c => counter.get.flatMap(c => counter.set()))
-    //   res <- counter.get
-    // } yield res
-
-  }
-
+  } yield ()
 
 }

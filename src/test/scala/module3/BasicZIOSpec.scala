@@ -1,61 +1,69 @@
 package module3
 
-import zio.ZIO
-import zio.console.{getStrLn, putStrLn}
-import zio.duration.durationInt
-import zio.random.Random
-import zio.test.Assertion.{anything, equalTo, hasSize, isSubtype, throws}
-import zio.test.{DefaultRunnableSpec, ZSpec}
+import zio._
 import zio.test._
-import zio.test.environment._
-import zio.test.TestAspect._
+import zio.test.Assertion._
 
-import scala.language.postfixOps
 import java.io.IOException
 
 
-object BasicZIOSpec extends DefaultRunnableSpec{
+object BasicZIOSpec extends ZIOSpecDefault {
 
-  val greeter: ZIO[zio.console.Console, IOException, Unit] = for{
-    _ <- putStrLn("Как тебя зовут")
-    name <- getStrLn
-    _ <- putStrLn(s"Привет, $name")
+  /**
+   * В ZIO 2 Test:
+   * - DefaultRunnableSpec заменен на ZIOSpecDefault
+   * - testM заменен на test
+   * - environment.TestConsole заменен на TestConsole
+   * - assert(x)(equalTo(y)) без изменений
+   */
+
+  val greeter: ZIO[Any, IOException, Unit] = for {
+    _ <- Console.printLine("Как тебя зовут")
+    name <- Console.readLine
+    _ <- Console.printLine(s"Привет, $name")
   } yield ()
 
 
-  val intGen: Gen[Random, Int] = Gen.anyInt
+  val intGen: Gen[Any, Int] = Gen.int
 
   override def spec = suite("Basic")(
     suite("Arithmetic")(
       test("2 * 2 = 4")(
-        assert(2 * 2)(equalTo(4))
+        assertTrue(2 * 2 == 4)
       ),
-      test("division by zero"){
-        assert(2 / 0)(throws(isSubtype[ArithmeticException](anything)))
+      test("division by zero") {
+        assertTrue(
+          try {
+            2 / 0
+            false
+          } catch {
+            case _: ArithmeticException => true
+          }
+        )
       }
     ),
-    suite("Property based testing"){
-      testM("int addition is associative"){
-        check(intGen, intGen, intGen){ (x, y, z) =>
+    suite("Property based testing")(
+      test("int addition is associative") {
+        check(intGen, intGen, intGen) { (x, y, z) =>
           val left = (x + y) + z
           val right = x + (y + z)
-          assert(left)(equalTo(right))
+          assertTrue(left == right)
         }
       }
-    },
+    ),
     suite("Effect testing")(
-      testM("simple effect")(
-        assertM(ZIO.succeed(2 * 2))(equalTo(4))
+      test("simple effect")(
+        assertZIO(ZIO.succeed(2 * 2))(equalTo(4))
       )
     ),
-    testM("test console")(
-      for{
+    test("test console")(
+      for {
         _ <- TestConsole.feedLines("Alex")
         _ <- greeter
         value <- TestConsole.output
       } yield {
-          assert(value)(hasSize(equalTo(2))) && 
-          assert(value(1))(equalTo("Привет, Alex\n"))
+          assertTrue(value.size == 2) && 
+          assertTrue(value(1) == "Привет, Alex\n")
       }
     )
   )

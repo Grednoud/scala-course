@@ -1,37 +1,40 @@
 package module4
 
-import io.getquill.{Escape, JdbcContextConfig, Literal, NamingStrategy, PostgresZioJdbcContext}
-import com.typesafe.config.{Config}
+import zio._
 import com.zaxxer.hikari.{HikariConfig, HikariDataSource}
-import zio.interop.catz._
-import zio.ZLayer
-import zio.ZIO
-import zio.Has
-import zio.blocking.Blocking
+import com.dimafeng.testcontainers.PostgreSQLContainer
+import io.getquill.{NamingStrategy, Escape, Literal}
+import io.getquill.PostgresZioJdbcContext
 
 object DBTransactor {
 
-  type DataSource = Has[javax.sql.DataSource]
+  /**
+   * В ZIO 2 + Quill 4.x:
+   * - Has[A] больше не используется  
+   * - ZManaged -> Scope + ZIO.acquireRelease
+   * - PostgresZioJdbcContext используется напрямую
+   */
+
+  type DataSource = javax.sql.DataSource
 
   object Ctx extends PostgresZioJdbcContext(NamingStrategy(Escape, Literal))
 
-  def hikariDS(config: Config): HikariDataSource = JdbcContextConfig(config).dataSource
-
-  import com.dimafeng.testcontainers.PostgreSQLContainer
-
-  def test: ZLayer[TestContainer.Postgres with Blocking, Throwable, DataSource] = ZLayer.fromManaged(
-      (for {
-      pg <- ZIO.service[PostgreSQLContainer].toManaged_
-      config <- ZIO.effect{
-        val hc = new HikariConfig()
-        hc.setUsername(pg.username)
-        hc.setPassword(pg.password)
-        hc.setJdbcUrl(pg.jdbcUrl)
-        hc.setDriverClassName(pg.driverClassName)
-        hc
-      }.toManaged_
-      ds <- ZIO.effect(new HikariDataSource(config)).toManaged_
-    } yield ds)
-  )
+  def test: ZLayer[PostgreSQLContainer, Throwable, DataSource] = 
+    ZLayer.scoped {
+      for {
+        pg <- ZIO.service[PostgreSQLContainer]
+        config <- ZIO.attempt {
+          val hc = new HikariConfig()
+          hc.setUsername(pg.username)
+          hc.setPassword(pg.password)
+          hc.setJdbcUrl(pg.jdbcUrl)
+          hc.setDriverClassName(pg.driverClassName)
+          hc
+        }
+        ds <- ZIO.acquireRelease(
+          ZIO.attempt(new HikariDataSource(config))
+        )(ds => ZIO.succeed(ds.close()))
+      } yield ds
+    }
 
 }

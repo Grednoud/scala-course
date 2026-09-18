@@ -1,52 +1,57 @@
 package module4.phoneBook
 
 import cats.effect.{ExitCode => CatsExitCode}
-import cats.syntax.all._
 import org.http4s.implicits._
 import org.http4s.server.Router
-import org.http4s.server.blaze.BlazeServerBuilder
-import zio.blocking.Blocking
-import zio.clock.Clock
+import org.http4s.ember.server.EmberServerBuilder
+import zio._
 import zio.interop.catz._
-import zio.{RIO, ZIO}
-import zio.{ZLayer, Layer}
-import zio.config.ReadError
-import configuration._
-import org.http4s.HttpRoutes
-import configuration._
+import module4.phoneBook.configuration.{Config => AppConfig, Configuration}
 import api.PhoneBookAPI
 import module4.phoneBook.services.PhoneBookService
 import module4.phoneBook.db._
-import zio.random.Random
 import module4.phoneBook.dao.repositories.{PhoneRecordRepository, AddressRepository}
-import zio.Has
+import com.comcast.ip4s._
 
 
 object Server {
 
-    type AppEnvironment = PhoneBookService.PhoneBookService with PhoneRecordRepository.PhoneRecordRepository with AddressRepository.AddressRepository with Configuration with 
-    Clock with Blocking with LiquibaseService.Liqui with LiquibaseService.LiquibaseService with Random with DataSource
+    /**
+     * В ZIO 2 + http4s 0.23+:
+     * - Has[A] больше не используется
+     * - BlazeServerBuilder заменен на EmberServerBuilder
+     */
 
+    type AppEnvironment = PhoneBookService.PhoneBookService with 
+      PhoneRecordRepository.PhoneRecordRepository with 
+      AddressRepository.AddressRepository with 
+      Configuration with 
+      LiquibaseService.Liqui with 
+      DataSource
 
-    val appEnvironment = Configuration.live >+> Blocking.live >+> zioDS >+> LiquibaseService.liquibaseLayer ++ 
-    PhoneRecordRepository.live >+> AddressRepository.live >+> PhoneBookService.live ++ LiquibaseService.live
+    val appEnvironment: ZLayer[Any, Throwable, AppEnvironment] = 
+      Configuration.live >+> 
+      zioDS >+> 
+      LiquibaseService.liquibaseLayer ++ 
+      PhoneRecordRepository.live >+> 
+      AddressRepository.live >+> 
+      PhoneBookService.live
 
     type AppTask[A] = RIO[AppEnvironment, A]
 
-    val httApp = Router[AppTask]("/phoneBook" -> new PhoneBookAPI().route).orNotFound
+    val httpApp = Router[AppTask]("/phoneBook" -> new PhoneBookAPI[AppEnvironment]().route).orNotFound
 
-    val server = for{
-      config <- zio.config.getConfig[Config]
-       _ <- LiquibaseService.performMigration
-      server <- ZIO.runtime[AppEnvironment].flatMap{ implicit rts =>
-          val ec = rts.platform.executor.asEC
-          BlazeServerBuilder[AppTask](ec)
-          .bindHttp(config.api.port, config.api.host)
-          .withHttpApp(httApp)
-          .serve
-          .compile[AppTask, AppTask, CatsExitCode]
-          .drain
-      }
-
-    } yield server
+    val server: ZIO[AppEnvironment, Throwable, Unit] = for {
+      config <- ZIO.service[AppConfig]
+      _ <- LiquibaseService.performMigration
+      _ <- ZIO.executor.flatMap { executor =>
+          EmberServerBuilder
+            .default[AppTask]
+            .withHost(Host.fromString(config.api.host).getOrElse(host"0.0.0.0"))
+            .withPort(Port.fromInt(config.api.port).getOrElse(port"8080"))
+            .withHttpApp(httpApp)
+            .build
+            .useForever
+        }
+    } yield ()
 }

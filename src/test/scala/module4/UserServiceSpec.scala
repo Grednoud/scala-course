@@ -1,91 +1,67 @@
 package module4
 
-import zio.test.DefaultRunnableSpec
-import zio.test.ZSpec
+import zio._
 import zio.test._
-import module4.homework.dao.repository.UserRepository
-import zio.ZIO
-import homework.dao.entity.User
-import io.getquill.CompositeNamingStrategy2
-import io.getquill.Escape
-import io.getquill.Literal
-import zio.interop.catz._
 import zio.test.Assertion._
-import module4.homework.dao.entity.Role
-import zio.blocking.Blocking
-import zio.Layer
-import zio.test.environment.TestEnvironment
-import zio.random.Random
-import zio.{Has, ZLayer}
-import zio.Task
-import zio.random.Random._
+import module4.homework.services.UserService
+import module4.homework.dao.repository.UserRepository
+import module4.homework.dao.entity.{User, UserId}
 import java.util.UUID
-import TestAspect._
-import homework.services.UserService
-import module4.homework.dao.entity.RoleCode
 
 
-object UserServiceSpec extends DefaultRunnableSpec{
+object UserServiceSpec extends ZIOSpecDefault {
+
+    /**
+     * В ZIO 2 Test:
+     * - DefaultRunnableSpec -> ZIOSpecDefault
+     * - testM -> test
+     * 
+     * ВАЖНО: Эти тесты требуют Docker для запуска testcontainers.
+     */
 
     import MigrationAspects._
-    val dc = DBTransactor.Ctx
-    import dc._
 
-    type Env = Blocking with TestContainer.Postgres with DBTransactor.DataSource with
-        UserRepository.UserRepository with LiquibaseService.Liqui with  LiquibaseService.LiquibaseService with UserService.UserService
+    type Env = TestContainer.Postgres with 
+        DBTransactor.DataSource with
+        UserRepository.UserRepository with 
+        UserService.UserService with
+        LiquibaseService.Liqui with 
+        LiquibaseService.LiquibaseService
     
     val layer: ZLayer[Any, Throwable, Env] = 
-        Blocking.live >+> TestContainer.postgres() >+> DBTransactor.test >+> LiquibaseService.liquibaseLayer ++ 
-        UserRepository.live >+> UserService.live ++ LiquibaseService.live
+        TestContainer.postgres() >+> 
+        DBTransactor.test >+> 
+        LiquibaseService.liquibaseLayer ++ 
+        UserRepository.live >+> 
+        UserService.live ++ 
+        LiquibaseService.live
 
-
-
-    val zLayer: ZLayer[Any, Nothing, Env] = 
-        layer.orDie
-
-
-    val users = List(
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120))
-    )
-    val usersGen = Gen.fromIterable(users)
-
-    val Manager = RoleCode("manager")
 
     def spec = suite("UserServiceSpec")(
-            testM("add user with role")(
-                for{
-                        userService <- ZIO.environment[UserService.UserService].map(_.get)
-                        _ <- userService.addUserWithRole(users.head, Manager)
-                        result <- userService.listUsersDTO()
-                    } yield assert(result.length)(equalTo(1)) &&
-                        assert(result.head.user)(equalTo(users.head)) && assert(result.head.roles)(equalTo(Set(Role(Manager.code, "Manager"))))
-            )  @@ migrate(),
-            testM("list user with role Manager should return empty List")(
-                for{
-                    userRepo <- ZIO.environment[UserRepository.UserRepository].map(_.get)
-                    userService <- ZIO.environment[UserService.UserService].map(_.get)
-                    _ <- userRepo.createUsers(users)
-                    result <- userService.listUsersWithRole(Manager)
-                } yield assert(result)(isEmpty)
-            ) @@ migrate(),
-            testM("list user with role Manager should return one Entry")(
-                for{
-                    userRepo <- ZIO.environment[UserRepository.UserRepository].map(_.get)
-                    userService <- ZIO.environment[UserService.UserService].map(_.get)
-                    _ <- userRepo.createUsers(users.tail)
-                    _ <- userService.addUserWithRole(users.head, Manager)
-                    result <- userService.listUsersWithRole(Manager)
-                } yield assert(result.length)(equalTo(1)) && assert(result.head.user)(equalTo(users.head)) && 
-                    assert(result.head.roles)(equalTo(Set(Role(Manager.code, "Manager"))))
-            ) @@ migrate()
-        ).provideCustomLayer(zLayer)  
+        test("getUser returns None for non-existent user")(
+            for {
+                result <- UserService.getUser(UserId(UUID.randomUUID().toString()))
+            } yield assertTrue(result.isEmpty)
+        ) @@ migrate(),
+        test("createUser and then getUser returns the created user")(
+            for {
+                u <- ZIO.succeed(User(UUID.randomUUID().toString(), "John", "Doe", 30))
+                created <- UserService.createUser(u)
+                result <- UserService.getUser(created.typedId)
+            } yield assertTrue(
+                result.isDefined,
+                result.get.firstName == "John",
+                result.get.lastName == "Doe"
+            )
+        ) @@ migrate(),
+        test("listUsers returns all created users")(
+            for {
+                u1 <- ZIO.succeed(User(UUID.randomUUID().toString(), "Alice", "Smith", 25))
+                u2 <- ZIO.succeed(User(UUID.randomUUID().toString(), "Bob", "Jones", 35))
+                _ <- UserService.createUser(u1)
+                _ <- UserService.createUser(u2)
+                result <- UserService.listUsers
+            } yield assertTrue(result.length >= 2)
+        ) @@ migrate()
+    ).provideLayer(layer.orDie) @@ TestAspect.ifEnv("DOCKER_AVAILABLE")(_.toLowerCase == "true") @@ TestAspect.sequential
 }

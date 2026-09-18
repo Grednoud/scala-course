@@ -1,49 +1,50 @@
 package module4
 
-import zio.test.DefaultRunnableSpec
-import zio.test.ZSpec
+import zio._
 import zio.test._
-import module4.homework.dao.repository.UserRepository
-import zio.ZIO
-import homework.dao.entity.User
-import io.getquill.CompositeNamingStrategy2
-import io.getquill.Escape
-import io.getquill.Literal
-import zio.interop.catz._
 import zio.test.Assertion._
-import module4.homework.dao.entity.Role
-import zio.blocking.Blocking
-import zio.Layer
-import zio.test.environment.TestEnvironment
-import zio.random.Random
-import zio.{Has, ZLayer}
-import zio.Task
-import zio.random.Random._
+import zio.test.TestAspect._
+import module4.homework.dao.repository.UserRepository
+import module4.homework.dao.entity.{User, UserId}
 import java.util.UUID
-import TestAspect._
-import module4.homework.dao.entity.UserId
 
 
-object UserRepositorySpec extends DefaultRunnableSpec{
+object UserRepositorySpec extends ZIOSpecDefault {
+
+    /**
+     * В ZIO 2 Test:
+     * - DefaultRunnableSpec -> ZIOSpecDefault
+     * - testM -> test
+     * - Has[A] больше не используется
+     * - provideCustomLayer -> provide или provideLayer
+     * 
+     * ВАЖНО: Эти тесты требуют Docker для запуска testcontainers.
+     * При отсутствии Docker тесты будут пропущены.
+     */
 
     import MigrationAspects._
-    val dc  = DBTransactor.Ctx
+    val dc = DBTransactor.Ctx
     import dc._
 
-    type Env = Blocking with TestContainer.Postgres with DBTransactor.DataSource with
-        UserRepository.UserRepository with LiquibaseService.Liqui with  LiquibaseService.LiquibaseService
+    type Env = TestContainer.Postgres with 
+        DBTransactor.DataSource with
+        UserRepository.UserRepository with 
+        LiquibaseService.Liqui with 
+        LiquibaseService.LiquibaseService
     
     val layer: ZLayer[Any, Throwable, Env] = 
-        Blocking.live >+> TestContainer.postgres() >+> DBTransactor.test >+> LiquibaseService.liquibaseLayer ++ 
-        UserRepository.live ++ LiquibaseService.live
+        TestContainer.postgres() >+> 
+        DBTransactor.test >+> 
+        LiquibaseService.liquibaseLayer ++ 
+        UserRepository.live ++ 
+        LiquibaseService.live
 
 
-
-    val genName: Gen[Random with Sized, String] = Gen.anyASCIIString
-    val genAge: Gen[Random,Int] = Gen.int(18, 120)
-    val genUuid: Gen[Random, UUID] = Gen.anyUUID
+    val genName: Gen[Any, String] = Gen.alphaNumericString
+    val genAge: Gen[Any, Int] = Gen.int(18, 120)
+    val genUuid: Gen[Any, UUID] = Gen.uuid
     
-    val genUser = for {
+    val genUser: Gen[Any, User] = for {
         uuid <- genUuid
         firstName <- genName
         lastName <- genName
@@ -51,90 +52,89 @@ object UserRepositorySpec extends DefaultRunnableSpec{
     } yield User(uuid.toString(), firstName, lastName, age)
 
 
-    val users = List(
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120)),
-        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(120))
+    val users: List[User] = List(
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18),
+        User(UUID.randomUUID().toString(), scala.util.Random.nextString(15), scala.util.Random.nextString(30), scala.util.Random.nextInt(100) + 18)
     )
-    val usersGen = Gen.fromIterable(users)
+    val usersGen: Gen[Any, User] = Gen.fromIterable(users)
 
 
 
     def spec = suite("UserRepositorySpec")(
-            testM("метод list возвращает пустую коллекцию, на пустой базе")(
-                for{
-                        userRepo <- ZIO.environment[UserRepository.UserRepository].map(_.get)
-                        result <- userRepo.list()
-                    } yield assert(1)(equalTo(1)) &&
-                        assert(result.isEmpty)(equalTo(true))
-            )  @@ migrate(),
-            testM("методы create а затем findBy по созданному пользователю")(
-                checkAllM(usersGen){ user => 
-                    for{
-                        userRepo <- ZIO.environment[UserRepository.UserRepository].map(_.get)
-                        user <- userRepo.createUser(user)
-                        result <- userRepo.findUser(user.typedId).some.mapError(_ => new Exception("fetch failed"))
-                    } yield assert(user.id)(equalTo(result.id)) &&
-                        assert(result.firstName)(equalTo(user.firstName))
-                }
-
+            test("метод list возвращает пустую коллекцию, на пустой базе")(
+                for {
+                    userRepo <- ZIO.service[UserRepository.UserRepository]
+                    result <- userRepo.list()
+                } yield assertTrue(result.isEmpty)
             ) @@ migrate(),
-            testM("метод findBy по случайному id")(
-                checkAllM(usersGen, Gen.anyUUID){ (user, id) => 
-                    for{
-                        userRepo <- ZIO.environment[UserRepository.UserRepository].map(_.get)
-                        user <- userRepo.createUser(user)
+            test("методы create а затем findBy по созданному пользователю")(
+                check(usersGen) { user => 
+                    for {
+                        userRepo <- ZIO.service[UserRepository.UserRepository]
+                        created <- userRepo.createUser(user)
+                        result <- userRepo.findUser(created.typedId)
+                    } yield assertTrue(
+                        result.isDefined,
+                        result.get.id == created.id,
+                        result.get.firstName == user.firstName
+                    )
+                }
+            ) @@ migrate(),
+            test("метод findBy по случайному id")(
+                check(usersGen, genUuid) { (user, id) => 
+                    for {
+                        userRepo <- ZIO.service[UserRepository.UserRepository]
+                        _ <- userRepo.createUser(user)
                         result <- userRepo.findUser(UserId(id.toString()))
-                    } yield assert(result)(isNone) 
+                    } yield assertTrue(result.isEmpty) 
                 }
-
             ) @@ migrate(),
-            testM("метод update должен обновлять только целевого пользователя")(
-                for{
-                    userRepo <- ZIO.environment[UserRepository.UserRepository].map(_.get)
-                    users <- userRepo.createUsers(users)
-                    user = users.head
+            test("метод update должен обновлять только целевого пользователя")(
+                for {
+                    userRepo <- ZIO.service[UserRepository.UserRepository]
+                    createdUsers <- userRepo.createUsers(users)
+                    user = createdUsers.head
                     newFirstName = "Petr"
                     _ <- userRepo.updateUser(user.copy(firstName = newFirstName))
-                    updated <- userRepo.findUser(user.typedId).some.mapError(_ => new Exception("fetch failed"))
+                    updated <- userRepo.findUser(user.typedId)
                     all <- userRepo.list()
-
-                } yield assert(updated.firstName)(equalTo(newFirstName)) && 
-                    assert(all.filter(_.id != user.id).toSet)(equalTo(users.filter(_.id != user.id).toSet))
-
+                } yield assertTrue(
+                    updated.isDefined,
+                    updated.get.firstName == newFirstName,
+                    all.filter(_.id != user.id).toSet == createdUsers.filter(_.id != user.id).toSet
+                )
             ) @@ migrate(),
-            testM("метод delete должен удалять только целевого пользователя")(
-                for{
-                    userRepo <- ZIO.environment[UserRepository.UserRepository].map(_.get)
-                    users <- userRepo.createUsers(users)
-                    user = users.last
+            test("метод delete должен удалять только целевого пользователя")(
+                for {
+                    userRepo <- ZIO.service[UserRepository.UserRepository]
+                    createdUsers <- userRepo.createUsers(users)
+                    user = createdUsers.last
                     _ <- userRepo.deleteUser(user)
                     all <- userRepo.list()
-
-                } yield assert(all.length)(equalTo(9)) && 
-                    assert(all.toSet)(equalTo(users.filter(_.id != user.id).toSet))
-
+                } yield assertTrue(
+                    all.length == 9,
+                    all.toSet == createdUsers.filter(_.id != user.id).toSet
+                )
             ) @@ migrate(),
-            testM("метод findByLastName должен находить пользователя")(
-                    for{
-                        userRepo <- ZIO.environment[UserRepository.UserRepository].map(_.get)
-                        users <- userRepo.createUsers(users)
-                        user = users(5)
-                        result <- userRepo.findByLastName(user.lastName)
-                    } yield assert(result.length)(equalTo(1)) &&
-                        assert(result.head.lastName)(equalTo(user.lastName))
-
+            test("метод findByLastName должен находить пользователя")(
+                for {
+                    userRepo <- ZIO.service[UserRepository.UserRepository]
+                    createdUsers <- userRepo.createUsers(users)
+                    user = createdUsers(5)
+                    result <- userRepo.findByLastName(user.lastName)
+                } yield assertTrue(
+                    result.length == 1,
+                    result.head.lastName == user.lastName
+                )
             ) @@ migrate(),
 
-        ).provideCustomLayer(layer.orDie)  
+        ).provideLayer(layer.orDie) @@ TestAspect.ifEnv("DOCKER_AVAILABLE")(_.toLowerCase == "true") @@ sequential
 }
-
-// 7c038f1d-4e8c-4c8e-a8ba-dd58b49b62af
-// 7c038f1d-4e8c-4c8e-a8ba-dd58b49b62af

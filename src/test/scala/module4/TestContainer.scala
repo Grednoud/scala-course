@@ -1,22 +1,27 @@
 package module4
 
-import zio.Has
+import zio._
 import com.dimafeng.testcontainers.PostgreSQLContainer
-import zio.ZLayer
-import zio.blocking.{effectBlocking, Blocking}
-import zio.ZManaged
-import org.testcontainers.utility.DockerImageName
-
 
 object TestContainer {
-  type Postgres = Has[PostgreSQLContainer]
+
+  /**
+   * В ZIO 2:
+   * - Has[A] больше не используется
+   * - ZManaged -> Scope + ZIO.acquireRelease
+   * - effectBlocking -> ZIO.attemptBlocking
+   */
+
+  type Postgres = PostgreSQLContainer
   
-  def postgres(): ZLayer[Blocking, Nothing, Postgres] =
-    ZManaged.make {
-      effectBlocking {
-        val container = new PostgreSQLContainer()
-        container.start()
-        container
-      }.orDie
-    }(container => effectBlocking(container.stop()).orDie).toLayer
+  def postgres(): ZLayer[Any, Nothing, Postgres] =
+    ZLayer.scoped {
+      ZIO.acquireRelease(
+        ZIO.attemptBlocking {
+          val container = new PostgreSQLContainer()
+          container.start()
+          container
+        }.orDie
+      )(container => ZIO.attemptBlocking(container.stop()).orDie)
+    }
 }

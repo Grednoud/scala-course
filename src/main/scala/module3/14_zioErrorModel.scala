@@ -1,144 +1,48 @@
 package module3
 
-import zio.{IO, Task, UIO, URIO}
-import zio.console.{Console, putStrLn}
+import zio._
 
-object zioErrorHandling {
+object zioErrorModel {
 
-  sealed trait Cause[+E]
+  type UserID
+  type User
 
-  object Cause {
-
-    final case class Fail[E](e: E) extends Cause[E]
-
-    final case class Die(t: Throwable) extends Cause[Nothing]
-
+  trait GetUser {
+    def getUserById(id: UserID): Task[User]
   }
 
-
-  case class ZIO[-R, +E, +A](run: R => Either[E, A]) {self =>
-
-    /**
-      * 
-      * Базовый оператор для работы с ошибками
-      */
-
-      def foldM[R1 <: R, E1, B](
-        failure: E => ZIO[R1, E1, B],
-        success: A => ZIO[R1, E1, B]
-      ): ZIO[R1, E1, B] = ZIO(
-        r => self.run(r).fold(
-          failure,
-          success
-        ).run(r)
-      )
-
-
-
-
-    def orElse[R1 <: R, E1, A1 >: A](other: ZIO[R1, E1, A1]): ZIO[R1, E1, A1] = foldM(
-      _ => other,
-      v => ZIO(_ => Right(v))
-    )
-
-    /**
-     * Реализовать метод, котрый будет игнорировать ошибку в случае падения,
-     * а в качестве результата возвращать Option
-     */
-    def option: ZIO[R, Nothing, Option[A]] = foldM(
-      _ => ZIO(r => Right(None)),
-      v => ZIO(r => Right(Some(v)))
-    )
-
-    /**
-     * Реализовать метод, котрый будет работать с каналом ошибки
-     */
-    def mapError[E1](f: E => E1): ZIO[R, E1, A] = foldM(
-      e => ZIO(_ => Left(f(e))),
-      v => ZIO(_ => Right(v))
-    )
-
-
-  }
-
-
-
-  sealed trait UserRegistrationError
-
-  case object InvalidEmail extends UserRegistrationError
-
-  case object WeakPassword extends UserRegistrationError
-
-  lazy val checkEmail: IO[InvalidEmail.type, String] = ???
-
-  lazy val checkPassword: IO[WeakPassword.type, String] = ???
-
-  lazy val userRegistrationCheck: 
-    zio.IO[UserRegistrationError, (String, String)] = checkEmail <*> checkPassword
-
-
-
-  lazy val io1: IO[String, String] = ???
-
-  lazy val io2: IO[Int, String] = ???
-
   /**
-   * 1. Какой будет тип на выходе, если мы скомбинируем эти два эффекта с помощью zip
+   * В ZIO 2 обработка ошибок работает аналогично ZIO 1,
+   * но с некоторыми улучшениями API
    */
 
-   val z1: zio.IO[Any, (String, String)] = io1 <*> io2
+  // Примеры работы с ошибками
 
-  /**
-   * Можем ли мы как-то избежать потерю информации об ошибке, в случае композиции?
-    */
+  // Создание эффекта с ошибкой
+  val failedEffect: IO[String, Nothing] = ZIO.fail("Something went wrong")
 
-  lazy val io3: zio.IO[Either[String, Int], (String, String)] = 
-    io1.mapError(Left(_)).zip(io2.mapError(Right(_)))
+  // Восстановление из ошибки
+  val recovered: UIO[String] = failedEffect.catchAll(err => ZIO.succeed(s"Recovered from: $err"))
 
+  // Преобразование ошибки
+  val mappedError: IO[Int, Nothing] = failedEffect.mapError(_.length)
 
+  // Fold - обработка и успеха и ошибки
+  val folded: UIO[String] = failedEffect.fold(
+    err => s"Error: $err",
+    success => s"Success: $success"
+  )
 
-  def either: Either[String, Int] = ???
+  // FoldZIO - то же самое, но с эффектами
+  val foldedZIO: UIO[String] = failedEffect.foldZIO(
+    err => ZIO.succeed(s"Error: $err"),
+    success => ZIO.succeed(s"Success: $success")
+  )
 
-  def errorToErrorCode(str: String): Int = ???
+  // Either - преобразование ошибки в Either
+  val asEither: UIO[Either[String, Nothing]] = failedEffect.either
 
-  lazy val effFromEither: IO[String, Int] = zio.ZIO.fromEither(either)
-
-  /**
-   * Залогировать ошибку effFromEither, не меняя ее тип и тип возвращаемого значения
-   */
-  lazy val z2: zio.ZIO[Console, String, Int] = ???
-  /**
-   * Изменить ошибку effFromEither
-   */
-
-  lazy val z3: zio.ZIO[Console, Int, Int] = z2.mapError(errorToErrorCode)
-
-
-  lazy val z4: UIO[Either[String,Int]] = effFromEither.either
-
-
-  // трансформировать ошибку
-  lazy val z5: zio.ZIO[Any, String, Int] = z4.absolve
-
-
-  // Разные типы ошибок
-
-    type User = String
-    type UserId = Int
-
-    sealed trait NotificationError
-    case object NotificationByEmailFailed extends NotificationError
-    case object NotificationBySMSFailed extends NotificationError
-
-    def getUserById(userId: UserId): Task[User] = ???
-
-    def sendEmail(user: User, email: String): IO[NotificationByEmailFailed.type, Unit] = ???
-    def sendSMS(user: User, phone: String): IO[NotificationBySMSFailed.type, Unit] = ???
-
-    def sendNotification(userId: UserId): IO[NotificationError, Unit] = for{
-      user <- getUserById(1).orDie
-      _ <- sendEmail(user, "email")
-      _ <- sendSMS(user, "9999")
-    } yield ()
+  // Cause - получение полной информации об ошибке
+  val withCause: UIO[Exit[String, Nothing]] = failedEffect.exit
 
 }

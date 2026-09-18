@@ -2,10 +2,15 @@ package module4.phoneBook
 
 import zio._
 
-object Main extends App {
+object Main extends ZIOAppDefault {
 
-  override def run(args: List[String]): URIO[zio.ZEnv, ExitCode] = 
+  /**
+   * В ZIO 2:
+   * - App заменен на ZIOAppDefault
+   * - run возвращает ZIO[Any, Any, Any]
+   */
+
+  override def run: ZIO[Any, Any, Any] = 
     Server.server
-    .provideSomeLayer[ZEnv](Server.appEnvironment)
-    .exitCode
+      .provide(Server.appEnvironment)
 }
